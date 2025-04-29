@@ -1,32 +1,33 @@
-# 📁 config.py
-import pathlib
+import pathlib  # To handle folder paths
+import earthaccess  # To manage login to NASA Earthdata
 
-# Earthaccess will handle authentication
+# Earthdata login credentials
 username = "will_pereira108"
 password = "Envirometrics2025?!"
 
-# This will prompt once and store credentials in ~/.netrc
-import earthaccess
+# Login to Earthdata and persist credentials
 auth = earthaccess.login(persist=True)
+assert auth.authenticated  # Make sure login actually worked
 
-# Region of interest: Chesapeake Bay area (guaranteed to have data)    
-bounding_box = (-61.5, -53.2, -57.5, -50.9)  # CONFIRM THIS !!
-start_date = "2024-12-15" 
-end_date = "2025-01-07"
-iron_release_date = "2024-12-30"  # just for tagging 'before'/'after'
+# Define the products you want to search (list)
+product_list = ["PACE_OCI_L3M_CHL", "PACE_OCI_L3M_PFT", "PACE_OCI_L3M_FLH"]  # ***** CHANGED to pull multiple products
 
-# Specific OCI L3M chlorophyll product
-product_list = ["PACE_OCI_L3M_CHL_NRT"] 
-
-
-# Output directory for downloads
+# Create downloads folder if it doesn't exist
 download_dir = pathlib.Path("downloads")
 download_dir.mkdir(exist_ok=True)
 
-# Cloud cover range (optional filter)
-#cloud_cover = (0, 50)    #CHANGE THIS!
+# Set the date range for granules (satellite data) search
+start_date = "2024-12-15"
+end_date = "2025-01-07"
 
-# MySQL DB config (DigitalOcean)
+# Important event date (to tag 'before'/'after' in database)
+iron_release_date = "2024-12-30"
+
+# Area of interest - Bounding box (Falkland Islands)
+# Format: (min_lon, min_lat, max_lon, max_lat)
+bbox = (-61.5, -53.2, -57.5, -50.9)
+
+# MySQL database connection settings
 db_config = {
     "host": "db-mysql-lon1-78576-do-user-18592894-0.h.db.ondigitalocean.com",
     "user": "doadmin",
