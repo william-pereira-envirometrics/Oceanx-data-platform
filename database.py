@@ -2,73 +2,52 @@
 import pymysql
 from config import db_config
 
+# Function to insert the processed satellite data into MySQL
 def insert_metrics(df):
-    create_table_sql = """
-    CREATE TABLE IF NOT EXISTS satellite_metrics (
+    drop_table_sql = """DROP TABLE IF EXISTS satellite_metrics_simple;"""
+
+    columns_with_types = ", ".join([f"{col} TEXT" for col in df.columns])
+
+    create_table_sql = f"""
+    CREATE TABLE IF NOT EXISTS satellite_metrics_simple (
         id INT AUTO_INCREMENT PRIMARY KEY,
-        product TEXT,
-        variable TEXT,
-        filename TEXT,
-        date DATE,
-        period TEXT,
-        mean FLOAT,
-        max FLOAT,
-        location TEXT,
-        latitude FLOAT,
-        longitude FLOAT,
-        observation_type TEXT,
-        chlorophyll_band TEXT,
-        bloom_intensity TEXT,
-        pft_type TEXT,
-        relative_growth_rate FLOAT,
-        dominance_percent FLOAT,
-        iron_fertilisation TEXT,
-        campaign_id TEXT,
-        sensor_name TEXT,
-        satellite TEXT
+        {columns_with_types}
     );
     """
 
-    insert_sql = """
-    INSERT INTO satellite_metrics (
-        product, variable, filename, date, period, mean, max,
-        location, latitude, longitude, observation_type,
-        chlorophyll_band, bloom_intensity, pft_type,
-        relative_growth_rate, dominance_percent,
-        iron_fertilisation, campaign_id, sensor_name, satellite
-    ) VALUES (
-        %s, %s, %s, %s, %s, %s, %s,
-        %s, %s, %s, %s,
-        %s, %s, %s,
-        %s, %s,
-        %s, %s, %s, %s
-    );
+    column_list = ", ".join(df.columns)
+    placeholder_list = ", ".join(["%s"] * len(df.columns))
+
+    insert_sql = f"""
+    INSERT INTO satellite_metrics_simple ({column_list})
+    VALUES ({placeholder_list});
     """
 
     conn, cur = None, None
+
     try:
         conn = pymysql.connect(**db_config)
         cur = conn.cursor()
+
+        cur.execute(drop_table_sql)
+        conn.commit()
+
         cur.execute(create_table_sql)
         conn.commit()
 
-        # ✅ Ensure all expected columns exist, fill with None if missing
-        df = df.reindex(columns=[
-            "product", "variable", "filename", "date", "period", "mean", "max",
-            "location", "latitude", "longitude", "observation_type",
-            "chlorophyll_band", "bloom_intensity", "pft_type",
-            "relative_growth_rate", "dominance_percent",
-            "iron_fertilisation", "campaign_id", "sensor_name", "satellite"
-        ], fill_value=None)
-
         rows = [tuple(row) for row in df.values]
+
         cur.executemany(insert_sql, rows)
         conn.commit()
 
-        print("✅ Data inserted into MySQL")
+        print(f"✅ Inserted {len(rows)} rows into MySQL")
+
     except Exception as e:
         print(f"❌ DB error: {e}")
+
     finally:
-        if cur: cur.close()
-        if conn: conn.close()
-        print("🧹 Cleanup complete")
+        if cur:
+            cur.close()
+        if conn:
+            conn.close()
+        print("🧹 DB cleanup complete")
