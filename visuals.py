@@ -1,4 +1,3 @@
-# 📁 visuals.py
 import streamlit as st
 import pandas as pd
 import pymysql
@@ -22,13 +21,21 @@ st.title("🛰️ Satellite Data Viewer")
 # Load and display the raw data
 with st.spinner("Loading data..."):
     df = load_data()
-    df.rename(columns={"variable": "Measurement"}, inplace=True)
+
+    # Rename only if columns exist
+    rename_dict = {}
+    if "variable" in df.columns:
+        rename_dict["variable"] = "Measurement"
+    if "latitude" in df.columns:
+        rename_dict["latitude"] = "Latitude"
+    if "longitude" in df.columns:
+        rename_dict["longitude"] = "Longitude"
+    df.rename(columns=rename_dict, inplace=True)
 
 if df.empty:
     st.warning("No data found in the database.")
 else:
     gb = GridOptionsBuilder.from_dataframe(df)
-
     for col in df.columns:
         gb.configure_column(col, filter="agSetColumnFilter", sortable=True)
 
