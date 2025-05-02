@@ -1,96 +1,110 @@
-import os  # To interact with the operating system (e.g., deleting files)
-import xarray as xr  # For opening and working with NetCDF files
-import pandas as pd  # For working with dataframes
-from config import product_list, download_dir, iron_release_date, start_date, end_date, bbox  # Importing necessary settings from config
-import earthaccess  # For accessing Earth data
-from pathlib import Path  # For handling file paths
-from database import insert_metrics  # For inserting the data into the database
+import os  # For file operations like deleting files
+import xarray as xr  # For handling NetCDF files
+import pandas as pd  # For tabular data manipulation
+from config import product_list, download_dir, iron_release_date, start_date, end_date, bbox  # Project settings
+import earthaccess  # NASA Earthdata API wrapper
+from pathlib import Path  # Safer file path operations
+from database import insert_metrics  # Database insertion function
 
-# Function to search, download, crop, and prepare data
+
+
+# Function to search, download, crop, extract and prepare satellite data
 def fetch_and_process():
-    all_metrics = []  # Empty list to store extracted records
+    all_metrics = []  # Final list of rows to go into our DataFrame
 
-    for product in product_list:  # Loop through each product
+    for product in product_list:
         print(f"🔍 Searching for granules for: {product}")
 
-        # Search for available granules in date range
-        results = earthaccess.search_data(                                     # SEARCH FOR x3 PRODUCTs within DATE period
-            short_name=product,  # Use product name from the config
-            temporal=(start_date, end_date)  # Set date range for the search
+        
+        results = earthaccess.search_data(                                  # Search NASA Earthdata for the product over the specified time range
+            short_name=product,
+            temporal=(start_date, end_date)
         )
 
-        if not results:  # If no results are found, skip this product
+        if not results:
             print(f"⚠️ No granules found for {product}")
-            continue  # Move on to the next product
+            continue
 
         print(f"📥 Attempting to download {len(results)} granules...")
 
-        # Download all found granules
         try:
-            paths = earthaccess.download(results, download_dir)  # Download the files             # DOWNLOAD SEARCH RESULTS
+            paths = earthaccess.download(results, download_dir)  # Download granules
         except Exception as e:
             print(f"❌ Download failed: {e}")
-            paths = []  # If download fails, set paths to empty list
+            paths = []
 
-        # Process each downloaded file
         for file_path in paths:
-            file_path = Path(file_path)  # Convert file path to a Path object for easier manipulation            # OPEN EACH FILE
+            file_path = Path(file_path)
             print(f"📂 Opening file: {file_path.name}")
 
+            
+            if "DAY" not in file_path.name or "4km.nc" not in file_path.name:                 # Skip files that are not daily or not 4km resolution
+                print(f"⏭️ Skipping non-daily or non-4km file: {file_path.name}")
+                continue
+
             try:
-                with xr.open_dataset(file_path) as ds:  # Open the dataset (NetCDF file)
-                    # Crop the dataset to Falklands bounding box (using lon and lat)
+                with xr.open_dataset(file_path) as ds:                                        # Filter for the bounding box region (location filter)
                     cropped_ds = ds.sel(
-                        lon=slice(bbox[0], bbox[2]),  # Select longitude within the bounding box            # FILTER DATA IN FILE BY
-                        lat=slice(bbox[1], bbox[3])   # Select latitude within the bounding box
+                        lon=slice(bbox[0], bbox[2]),
+                        lat=slice(bbox[1], bbox[3])
                     )
 
-                    # Extract date from the file name (assuming the date is in a specific format)
-                    date_raw = file_path.name.split(".")[1][:8]  # Extract date from filename (e.g., '20241201')
+                    # Extract the date from the filename
+                    date_raw = file_path.name.split(".")[1][:8]
                     try:
-                        date = pd.to_datetime(date_raw)  # Convert the extracted string to a pandas datetime object
+                        date = pd.to_datetime(date_raw)
                     except Exception:
-                        date = None  # Set date to None if conversion fails
+                        date = None
 
-                    # Loop through each variable in the cropped dataset (no filter for specific variables)
-                    for var_name, var_data in cropped_ds.data_vars.items():  # Loop through all variables
-                        flat_values = var_data.values.flatten()  # Flatten the variable data into a 1D array
+                    # Loop through all data variables (e.g. chlor_a, nflh)
+                    for var_name, var_data in cropped_ds.data_vars.items():
+                        lat = cropped_ds.lat.values  # 1D Array of latitudes
+                        lon = cropped_ds.lon.values  # 1D Array of longitudes
+                        values = var_data.values    # 2D array of values for this variable
 
-                        # Save every value, no filtering based on variable type (store all variables)
-                        for val in flat_values:
-                            all_metrics.append({
-                                "product": product,  # Store the product name (e.g., PACE_OCI_L3M_CHL)
-                                "filename": file_path.name,  # Store the filename (for tracking and debugging)       # SAVED COLUMNS 
-                                "date": date,  # Store the date extracted from the filename
-                                "period": "before" if date and date.strftime("%Y%m%d") < iron_release_date.replace("-", "") else "after",  # Period before or after iron release
-                                "variable": var_name,  # Store the variable name (metric)
-                                "value": float(val) if pd.notna(val) else None  # Store the value, convert NaN to None for SQL compatibility
-                            })
+                        # Check if data is (lat, lon) or (lon, lat)
+                        is_lat_first = values.shape == (len(lat), len(lon))
+
+                        # Loop through every pixel to extract lat, lon, and value
+                        for i, lat_val in enumerate(lat):
+                            for j, lon_val in enumerate(lon):
+                                try:
+                                    val = values[i, j] if is_lat_first else values[j, i]
+                                    all_metrics.append({
+                                        "product": product,
+                                        "filename": file_path.name,
+                                        "date": date,
+                                        "period": "before" if date and date.strftime("%Y%m%d") < iron_release_date.replace("-", "") else "after",
+                                        "variable": var_name,
+                                        "latitude": float(lat_val),
+                                        "longitude": float(lon_val),
+                                        "value": float(val) if pd.notna(val) else None
+                                    })
+                                except:
+                                    continue  # Skip if invalid index or NaN
 
             except Exception as e:
-                print(f"⚠️ Failed to process {file_path.name}: {e}")  # Error handling for dataset processing
+                print(f"⚠️ Failed to process {file_path.name}: {e}")
 
-            # Clean up local file to save space
+            # Delete the downloaded file to save space
             try:
-                os.remove(file_path)  # Delete the file after processing
+                os.remove(file_path)
             except Exception as e:
-                print(f"⚠️ Failed to delete {file_path.name}: {e}")  # Error handling for file deletion
+                print(f"⚠️ Failed to delete {file_path.name}: {e}")
 
-    # Convert list of dictionaries into a pandas DataFrame
-    df = pd.DataFrame(all_metrics)  # Convert the list of records into a structured DataFrame            # CONVERT TO DF 
+    # Convert list to DataFrame with consistent column order
+    expected_columns = ["product", "filename", "date", "period", "variable", "latitude", "longitude", "value"]
+    df = pd.DataFrame(all_metrics, columns=expected_columns)
+    df = df.where(pd.notna(df), None)  # Replace NaN with None for DB compatibility
 
-    # Replace NaN values with None for SQL compatibility (necessary for inserting into MySQL)
-    df = df.where(pd.notna(df), None)  # Replace NaN values with None
+    print(f"📊 Total rows prepared: {len(df)}")
+    return df
 
-    print(f"📊 Total rows prepared: {len(df)}")  # Print how many rows were processed
-    return df  # Return the DataFrame for further processing (insertion into the database)
-
-# Main script logic
+# Main block to run when script is executed directly
 if __name__ == "__main__":
-    df = fetch_and_process()  # Fetch and process data
-
-    if df.empty:  # Check if no data was extracted
-        print("⚠️ No data extracted.")  # Print warning if no data
+    df = fetch_and_process()
+    if df.empty:
+        print("⚠️ No data extracted.")
     else:
-        insert_metrics(df)  # Insert data into the database
-        print("✅ Pipeline complete")  # Print confirmation when the pipeline is complete
+        insert_metrics(df)
+        print("✅ Pipeline complete")
