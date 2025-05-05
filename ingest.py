@@ -46,7 +46,7 @@ def fetch_and_process():
                 with xr.open_dataset(file_path) as ds:                                        # Filter for the bounding box region (location filter)
                     cropped_ds = ds.sel(
                         lon=slice(bbox[0], bbox[2]),
-                        lat=slice(bbox[1], bbox[3])
+                        lat=slice(bbox[3], bbox[1]),
                     )
 
                     # Extract the date from the filename
