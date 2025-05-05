@@ -15,10 +15,10 @@ def fetch_and_process():
     for product in product_list:
         print(f"🔍 Searching for granules for: {product}")
 
-        
-        results = earthaccess.search_data(                                  # Search NASA Earthdata for the product over the specified time range
+        results = earthaccess.search_data(  # Search NASA Earthdata for the product over the specified time range
             short_name=product,
-            temporal=(start_date, end_date)
+            temporal=(start_date, end_date),
+            granule_name="*.DAY.*.4km.*",  # Skip files that are not daily or not 4km resolution
         )
 
         if not results:
@@ -37,11 +37,6 @@ def fetch_and_process():
             file_path = Path(file_path)
             print(f"📂 Opening file: {file_path.name}")
 
-            
-            if "DAY" not in file_path.name or "4km.nc" not in file_path.name:                 # Skip files that are not daily or not 4km resolution
-                print(f"⏭️ Skipping non-daily or non-4km file: {file_path.name}")
-                continue
-
             try:
                 with xr.open_dataset(file_path) as ds:                                        # Filter for the bounding box region (location filter)
                     cropped_ds = ds.sel(
@@ -56,32 +51,19 @@ def fetch_and_process():
                     except Exception:
                         date = None
 
-                    # Loop through all data variables (e.g. chlor_a, nflh)
-                    for var_name, var_data in cropped_ds.data_vars.items():
-                        lat = cropped_ds.lat.values  # 1D Array of latitudes
-                        lon = cropped_ds.lon.values  # 1D Array of longitudes
-                        values = var_data.values    # 2D array of values for this variable
-
-                        # Check if data is (lat, lon) or (lon, lat)
-                        is_lat_first = values.shape == (len(lat), len(lon))
-
-                        # Loop through every pixel to extract lat, lon, and value
-                        for i, lat_val in enumerate(lat):
-                            for j, lon_val in enumerate(lon):
-                                try:
-                                    val = values[i, j] if is_lat_first else values[j, i]
-                                    all_metrics.append({
-                                        "product": product,
-                                        "filename": file_path.name,
-                                        "date": date,
-                                        "period": "before" if date and date.strftime("%Y%m%d") < iron_release_date.replace("-", "") else "after",
-                                        "variable": var_name,
-                                        "latitude": float(lat_val),
-                                        "longitude": float(lon_val),
-                                        "value": float(val) if pd.notna(val) else None
-                                    })
-                                except:
-                                    continue  # Skip if invalid index or NaN
+                    subset_ds = cropped_ds[[i for i in ds if i != "palette"]]
+                    subset_da = subset_ds.to_dataarray("variable")
+                    subset_da["product"] = product
+                    subset_da["filename"] = file_path.name
+                    subset_da["date"] = date
+                    if date and date.strftime("%Y%m%d") < iron_release_date.replace(
+                        "-", ""
+                    ):
+                        subset_da["period"] = "before"
+                    else:
+                        subset_da["period"] = "after"
+                    subset_df = subset_da.to_dataframe("value").dropna()
+                    all_metrics.append(subset_df)
 
             except Exception as e:
                 print(f"⚠️ Failed to process {file_path.name}: {e}")
@@ -92,9 +74,8 @@ def fetch_and_process():
             except Exception as e:
                 print(f"⚠️ Failed to delete {file_path.name}: {e}")
 
-    # Convert list to DataFrame with consistent column order
-    expected_columns = ["product", "filename", "date", "period", "variable", "latitude", "longitude", "value"]
-    df = pd.DataFrame(all_metrics, columns=expected_columns)
+    # Concat list to DataFrame
+    df = pd.concat(all_metrics)
     df = df.where(pd.notna(df), None)  # Replace NaN with None for DB compatibility
 
     print(f"📊 Total rows prepared: {len(df)}")
