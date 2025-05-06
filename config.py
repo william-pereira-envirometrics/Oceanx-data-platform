@@ -10,7 +10,7 @@ auth = earthaccess.login(persist=True)
 assert auth.authenticated  # Make sure login actually worked
 
 # Define the products you want to search (list)
-product_list = ["PACE_OCI_L3M_CHL", "PACE_OCI_L3M_PFT", "PACE_OCI_L3M_FLH"]  # ***** CHANGED to pull multiple products
+product_list = ["PACE_OCI_L3M_CHL", "PACE_OCI_L3M_PFT", "PACE_OCI_L3M_FLH"] 
 
 # Create downloads folder if it doesn't exist
 download_dir = pathlib.Path("downloads")
