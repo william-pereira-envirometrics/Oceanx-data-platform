@@ -21,7 +21,7 @@ start_date = "2024-12-15"
 end_date = "2025-01-07"
 
 # Important event date (to tag 'before'/'after' in database)
-iron_release_date = "2024-12-30"
+iron_release_date = "2024-12-28"
 
 # Area of interest - Bounding box (Falkland Islands)
 # Format: (min_lon, min_lat, max_lon, max_lat)
