@@ -7,6 +7,32 @@ import earthaccess
 from pathlib import Path  # Safer file path operations
 from database import insert_metrics  # Function to insert data into database
 
+# ===============================
+# ✅ PIPELINE SUMMARY (STEP-BY-STEP)
+# ===============================
+#
+# [Filter & download satellite data from Earthaccess API]
+#     ⬇
+# [Filter downloaded files for daily 4km resolution]
+#     ⬇
+# [Open file as NetCDF (.nc)]
+#     ⬇
+# [Load data as xarray.Dataset]
+#     ⬇
+# [Loop through variables (e.g. chlor_a, nflh)]
+#     ⬇
+# [Subset by bounding box (lat/lon) using .sel()]
+#     ⬇
+# [Convert xarray → pandas DataFrame (lat/lon/value)]
+#     ⬇
+# [Clean, label metadata, and stack rows]
+#     ⬇
+# [Save as CSV and insert into database]
+#
+# ===============================
+
+
+
 # Main function that handles the entire data processing pipeline
 def fetch_and_process():
     all_metrics = []  # Empty list to store all processed data
@@ -15,7 +41,7 @@ def fetch_and_process():
     for product in product_list:
         print(f"🔍 Searching for granules for: {product}")
 
-        # Search NASA Earthdata for satellite data matching our criteria                                              #SEARCH CRITERIA (PRODUCT/ DATE/ LOCATION)
+        #SEARCH CRITERIA (PRODUCT/ DATE/ LOCATION)
         results = earthaccess.search_data(                                  
             short_name=product,                                            # Product name (e.g., chlorophyll data)
             temporal=(start_date, end_date),                              # Date range to search
@@ -41,7 +67,7 @@ def fetch_and_process():
             file_path = Path(file_path)
             print(f"📂 Opening file: {file_path.name}")
 
-            # Only process daily 4km resolution files
+            # Only process daily 4km resolution files                          #??????
             if not ("DAY" in file_path.name and "4km.nc" in file_path.name):                               # FITLER (4KM / DAY) BY FILENAME 
                 print(f"⏭️ Skipping non-daily or non-4km file: {file_path.name}")
                 continue
@@ -68,15 +94,15 @@ def fetch_and_process():
                         # Use xarray's sel to subset the data to region of interest
                         # Create a dictionary of coordinate bounds
                         bounds = {
-                            'lon': slice(bbox[0], bbox[2]),
+                            'lon': slice(bbox[0], bbox[2]),       
                             'lat': slice(bbox[1], bbox[3])
                         }
                         
                         # Subset the data using xarray's sel
-                        subset = var_data.sel(bounds)
+                        subset = var_data.sel(bounds)             # used to subset the data to region of interest- its like it cuts location out of world map using sel funciton 
                         
                         # Stack coordinates and convert to DataFrame in one step
-                        df = subset.to_dataframe().reset_index()
+                        df = subset.to_dataframe().reset_index()                     
                         
                         # Add metadata columns
                         df['product'] = product
@@ -93,8 +119,8 @@ def fetch_and_process():
                             var_name: 'value'
                         })
 
-                        # Remove any missing values
-                        df = df.dropna(subset=['value'])
+                        # Remove rows with missing values
+                        df = df.dropna(subset=['value'])      
                         
                         # Add to metrics list
                         all_metrics.extend(df.to_dict('records'))
@@ -118,7 +144,7 @@ def fetch_and_process():
 
     # Convert all collected data to a DataFrame                                    # CONVERTS TO LIST TO DF 
     expected_columns = ["product", "filename", "date", "period", "variable", "latitude", "longitude", "value", "units"]
-    df = pd.DataFrame(all_metrics, columns=expected_columns)
+    df = pd.DataFrame(all_metrics, columns=expected_columns)  #????
     df = df.where(pd.notna(df), None)  # Replaces all NaN values (used in pandas for missing data) with Python's None, which is more compatible with SQL-style databases
 
     # Save data to CSV file for inspection
@@ -129,8 +155,8 @@ def fetch_and_process():
     return df
 
 # This code runs when the script is executed directly (not imported)
-if __name__ == "__main__":
-    df = fetch_and_process()
+if __name__ == "__main__":   #????
+    df = fetch_and_process() 
     if df.empty:
         print("⚠️ No data extracted.")
     else:
