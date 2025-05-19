@@ -15,15 +15,18 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# Add logout button in the top right (now just clears session, not login)
-col1, col2 = st.columns([6, 1])
-with col2:
-    if st.button("Clear Session"):
-        st.session_state.clear()
-        st.rerun()
-
-# Show welcome message (no username)
-st.markdown(f"<div style='text-align: right; color: #4FC3F7;'>Welcome to OceanX Dashboard!</div>", unsafe_allow_html=True)
+# Try to load logo - works both locally and in cloud
+try:
+    if os.path.exists("LOGO.png"):
+        logo = Image.open("LOGO.png")
+    else:
+        logo = Image.open(os.path.join(os.path.dirname(__file__), "LOGO.png"))
+    st.markdown('<div style="display: flex; justify-content: center; align-items: center; margin-bottom: 1rem;">', 
+                unsafe_allow_html=True)
+    st.image(logo, width=300)
+    st.markdown('</div>', unsafe_allow_html=True)
+except Exception as e:
+    st.title("OceanX Analysis")
 
 @st.cache_data(show_spinner="Loading data from database...")
 def load_data():
@@ -57,19 +60,6 @@ st.markdown('''
     }
     </style>
 ''', unsafe_allow_html=True)
-
-# Try to load logo - works both locally and in cloud
-try:
-    if os.path.exists("LOGO.png"):
-        logo = Image.open("LOGO.png")
-    else:
-        logo = Image.open(os.path.join(os.path.dirname(__file__), "LOGO.png"))
-    st.markdown('<div style="display: flex; justify-content: center; align-items: center; margin-bottom: 1rem;">', 
-                unsafe_allow_html=True)
-    st.image(logo, width=300)
-    st.markdown('</div>', unsafe_allow_html=True)
-except Exception as e:
-    st.title("OceanX Analysis")
 
 # Load and display the data
 with st.spinner("Loading data..."):
