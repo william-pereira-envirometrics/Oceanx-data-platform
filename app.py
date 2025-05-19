@@ -7,26 +7,23 @@ import os
 import plotly.express as px
 from chlorophyll_analysis import render_chlorophyll_analysis
 from flh_analysis import render_flh_analysis
-from login import check_login  # Add this import
-
-# Check login before showing any content
-username = check_login()
 
 st.set_page_config(
-    page_title="OceanX Analysis",      # TITLE 
+    page_title="OceanX Analysis",
+    page_icon="🌊",
     layout="wide",
-    initial_sidebar_state="collapsed"  # Collapse sidebar by default
+    initial_sidebar_state="collapsed"
 )
 
-# Add logout button in the top right
+# Add logout button in the top right (now just clears session, not login)
 col1, col2 = st.columns([6, 1])
 with col2:
-    if st.button("Logout"):
+    if st.button("Clear Session"):
         st.session_state.clear()
         st.rerun()
 
-# Show welcome message
-st.markdown(f"<div style='text-align: right; color: #4FC3F7;'>Welcome, {username}!</div>", unsafe_allow_html=True)
+# Show welcome message (no username)
+st.markdown(f"<div style='text-align: right; color: #4FC3F7;'>Welcome to OceanX Dashboard!</div>", unsafe_allow_html=True)
 
 @st.cache_data(show_spinner="Loading data from database...")
 def load_data():
@@ -34,18 +31,11 @@ def load_data():
     query = "SELECT * FROM satellite_metrics_simple ORDER BY date DESC"
     df = pd.read_sql(query, conn)
     conn.close()
-    
-    # Export to CSV
-    csv_filename = 'satellite_data_export.csv'
-    df.to_csv(csv_filename, index=False)
-    print(f"💾 Data exported to {csv_filename}")
-    
     return df
 
 # Inject custom CSS for tabs
 st.markdown('''
     <style>
-    /* Custom tab styling */
     .stTabs [data-baseweb="tab-list"] {
         gap: 2rem;
         background-color: #111111;
@@ -68,50 +58,55 @@ st.markdown('''
     </style>
 ''', unsafe_allow_html=True)
 
-# OceanX logo at the very top
-logo_path = r"C:/Users/Will_/OneDrive/Clients/Oceanx/Project/LOGO.png"
-if os.path.exists(logo_path):
-    with open(logo_path, "rb") as f:
-        logo = Image.open(f)
-        st.markdown('<div style="display: flex; justify-content: center; align-items: center; margin-bottom: 1rem;">', unsafe_allow_html=True)
-        st.image(logo, width=300)
-        st.markdown('</div>', unsafe_allow_html=True)
+# Try to load logo - works both locally and in cloud
+try:
+    if os.path.exists("LOGO.png"):
+        logo = Image.open("LOGO.png")
+    else:
+        logo = Image.open(os.path.join(os.path.dirname(__file__), "LOGO.png"))
+    st.markdown('<div style="display: flex; justify-content: center; align-items: center; margin-bottom: 1rem;">', 
+                unsafe_allow_html=True)
+    st.image(logo, width=300)
+    st.markdown('</div>', unsafe_allow_html=True)
+except Exception as e:
+    st.title("OceanX Analysis")
 
-# Load and display the raw data
+# Load and display the data
 with st.spinner("Loading data..."):
     df = load_data()
 
-    # Rename only if columns exist
-    rename_dict = {}
-    if "variable" in df.columns:
-        rename_dict["variable"] = "Measurement"
-    if "latitude" in df.columns:
-        rename_dict["latitude"] = "Latitude"
-    if "longitude" in df.columns:
-        rename_dict["longitude"] = "Longitude"
-    df.rename(columns=rename_dict, inplace=True)
+    if not df.empty:
+        # Rename columns if they exist
+        rename_dict = {}
+        if "variable" in df.columns:
+            rename_dict["variable"] = "Measurement"
+        if "latitude" in df.columns:
+            rename_dict["latitude"] = "Latitude"
+        if "longitude" in df.columns:
+            rename_dict["longitude"] = "Longitude"
+        df.rename(columns=rename_dict, inplace=True)
 
-    # Convert numeric columns
-    numeric_columns = ['Latitude', 'Longitude', 'value']
-    for col in numeric_columns:
-        if col in df.columns:
-            df[col] = pd.to_numeric(df[col], errors='coerce')
+        # Convert numeric columns
+        numeric_columns = ['Latitude', 'Longitude', 'value']
+        for col in numeric_columns:
+            if col in df.columns:
+                df[col] = pd.to_numeric(df[col], errors='coerce')
 
-if df.empty:
-    st.warning("No data found in the database.")
-else:
-    # Create tabs for navigation
-    tab1, tab2 = st.tabs(["Chlorophyll Analysis", "Fluorescence Analysis"])
-    
-    with tab1:
-        st.markdown(
-            '<div style="color:#fff;font-size:3.5rem;font-weight:700;line-height:1;margin-bottom:1.5rem;">Chlorophyll Analysis</div>',
-            unsafe_allow_html=True
-        )
-        render_chlorophyll_analysis(df)
-    with tab2:
-        st.markdown(
-            '<div style="color:#fff;font-size:3.5rem;font-weight:700;line-height:1;margin-bottom:1.5rem;">Fluorescence Analysis</div>',
-            unsafe_allow_html=True
-        )
-        render_flh_analysis(df)
+        # Create tabs for navigation
+        tab1, tab2 = st.tabs(["Chlorophyll Analysis", "Fluorescence Analysis"])
+        
+        with tab1:
+            st.markdown(
+                '<div style="color:#fff;font-size:3.5rem;font-weight:700;line-height:1;margin-bottom:1.5rem;">Chlorophyll Analysis</div>',
+                unsafe_allow_html=True
+            )
+            render_chlorophyll_analysis(df)
+        
+        with tab2:
+            st.markdown(
+                '<div style="color:#fff;font-size:3.5rem;font-weight:700;line-height:1;margin-bottom:1.5rem;">Fluorescence Analysis</div>',
+                unsafe_allow_html=True
+            )
+            render_flh_analysis(df)
+    else:
+        st.warning("No data found in the database.")
