@@ -4,4 +4,6 @@ pymysql
 plotly
 Pillow
 bcrypt
-python-dotenv 
+python-dotenv
+duckdb
+earthaccess 
