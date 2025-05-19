@@ -7,13 +7,26 @@ import os
 import plotly.express as px
 from chlorophyll_analysis import render_chlorophyll_analysis
 from flh_analysis import render_flh_analysis
+from login import check_login  # Add this import
 
+# Check login before showing any content
+username = check_login()
 
 st.set_page_config(
     page_title="OceanX Analysis",      # TITLE 
     layout="wide",
     initial_sidebar_state="collapsed"  # Collapse sidebar by default
 )
+
+# Add logout button in the top right
+col1, col2 = st.columns([6, 1])
+with col2:
+    if st.button("Logout"):
+        st.session_state.clear()
+        st.rerun()
+
+# Show welcome message
+st.markdown(f"<div style='text-align: right; color: #4FC3F7;'>Welcome, {username}!</div>", unsafe_allow_html=True)
 
 @st.cache_data(show_spinner="Loading data from database...")
 def load_data():
