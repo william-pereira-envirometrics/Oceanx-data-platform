@@ -141,9 +141,9 @@ def render_chlorophyll_analysis(df):
     st.markdown("<br>", unsafe_allow_html=True)
     col1, col2 = st.columns(2)
     with col1:
-        st.subheader("Average iron before release")
+        st.subheader("Before Iron Release")
         agg_before = aggregate_for_heatmap(before_data)   #  HEATMAP BEFORE
-        plotly_heatmap(agg_before, title="Average iron before release")
+        plotly_heatmap(agg_before, title="Heat map")
         st.metric(
             "Average Concentration",                    # AVERAGE CHL BEFORE
             f"{before_data['value'].mean():.2f} mg/m³"
@@ -153,9 +153,9 @@ def render_chlorophyll_analysis(df):
             f"{before_data['value'].sum():.2f} mg/m³"
         )
     with col2:
-        st.subheader("Average iron after release")
+        st.subheader("After Iron Release")
         agg_after = aggregate_for_heatmap(after_data)     # HEATMAP AFTER
-        plotly_heatmap(agg_after, title="Average iron after release")
+        plotly_heatmap(agg_after, title="Heat map")
         st.metric(
             "Average Concentration",                   # AVERAGE CHL AFTER
             f"{after_data['value'].mean():.2f} mg/m³"
