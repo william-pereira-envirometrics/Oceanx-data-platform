@@ -45,7 +45,8 @@ def fetch_and_process():
         results = earthaccess.search_data(                                  
             short_name=product,                                            # Product name (e.g., chlorophyll data)
             temporal=(start_date, end_date),                              # Date range to search
-            bounding_box=bbox                                             # Geographic area to search
+            bounding_box=bbox,                                            # Geographic area to search
+            granule_name="*.DAY.*.4km.*"                                  # Filter for daily 4km resolution files
         )
 
         # Skip if no data found for this product
@@ -67,9 +68,9 @@ def fetch_and_process():
             file_path = Path(file_path)
             print(f"📂 Opening file: {file_path.name}")
 
-            # Only process daily 4km resolution files                          #??????
-            if not ("DAY" in file_path.name and "4km.nc" in file_path.name):                               # FITLER (4KM / DAY) BY FILENAME 
-                print(f"⏭️ Skipping non-daily or non-4km file: {file_path.name}")
+            # Only process daily 4km resolution files
+            if not "4km.nc" in file_path.name:                               # Simplified check
+                print(f"⏭️ Skipping non-4km file: {file_path.name}")
                 continue
 
             try:
@@ -92,16 +93,15 @@ def fetch_and_process():
                         units = var_data.attrs.get('units', None)
 
                         # Use xarray's sel to subset the data to region of interest
-                        # Create a dictionary of coordinate bounds
                         bounds = {
                             'lon': slice(bbox[0], bbox[2]),       
-                            'lat': slice(bbox[1], bbox[3])
+                            'lat': slice(bbox[3], bbox[1])  # Reversed order for decreasing latitude values
                         }
                         
                         # Subset the data using xarray's sel
-                        subset = var_data.sel(bounds)             # used to subset the data to region of interest- its like it cuts location out of world map using sel funciton 
+                        subset = var_data.sel(bounds)             
                         
-                        # Stack coordinates and convert to DataFrame in one step
+                        # Stack coordinates and convert to DataFrame
                         df = subset.to_dataframe().reset_index()                     
                         
                         # Add metadata columns
@@ -122,18 +122,19 @@ def fetch_and_process():
                         # Remove rows with missing values
                         df = df.dropna(subset=['value'])      
                         
-                        # Add to metrics list
-                        all_metrics.extend(df.to_dict('records'))
+                        # Add DataFrame to list
+                        all_metrics.append(df)
 
             except Exception as e:
                 print(f"⚠️ Failed to process {file_path.name}: {e}")
 
             # Print progress information
             print(f"\n📈 Metrics collected for {file_path.name}:")
-            print(f"Total records: {len(all_metrics)}")
+            total_rows = sum(len(df) for df in all_metrics)
+            print(f"Total records: {total_rows}")
             if all_metrics:
                 print("Sample of last 5 records:")
-                print(pd.DataFrame(all_metrics[-5:]))
+                print(pd.concat(all_metrics[-1:]).tail())
             print("\n")
 
             # Clean up by deleting the downloaded file
@@ -142,10 +143,10 @@ def fetch_and_process():
             except Exception as e:
                 print(f"⚠️ Failed to delete {file_path.name}: {e}")
 
-    # Convert all collected data to a DataFrame                                    # CONVERTS TO LIST TO DF 
+    # Combine all DataFrames
     expected_columns = ["product", "filename", "date", "period", "variable", "latitude", "longitude", "value", "units"]
-    df = pd.DataFrame(all_metrics, columns=expected_columns)  #????
-    df = df.where(pd.notna(df), None)  # Replaces all NaN values (used in pandas for missing data) with Python's None, which is more compatible with SQL-style databases
+    df = pd.concat(all_metrics, ignore_index=True)
+    df = df.where(pd.notna(df), None)  # Replace NaN with None for database compatibility
 
     # Save data to CSV file for inspection
     df.to_csv('satellite_data.csv', index=False)
