@@ -86,7 +86,7 @@ def fetch_and_process():
                     # Process each variable in the dataset
                     for var_name, var_data in ds.data_vars.items():
                         # Skip unnecessary variables
-                        if var_name.lower() == 'palette' or var_name.lower() not in ['chlor_a', 'nflh']:
+                        if var_name.lower() == 'palette' or var_name.lower() not in ['chlor_a', 'nflh', 'flh']:
                             continue
  
                         # Get units from variable attributes
